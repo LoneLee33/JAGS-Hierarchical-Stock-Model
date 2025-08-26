@@ -1,0 +1,335 @@
+---
+title: "Project"
+author: "Lun Li.14415"
+date: "2025-03-21"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(ggpcp)
+library(invgamma)
+
+temp <- read_csv("/Users/landlee/Downloads/temperature.txt")
+
+y_bar <- mean(temp$Temp)
+n <- length(temp$Temp)
+s2 <- var(temp)
+
+alpha <- 3
+beta <- 1
+mu_0 <- 1
+k <- 1
+
+sigma2 <- 
+  rinvgamma(1000, shape = alpha+n/2, 
+            scale = beta+1/2*((n-1)*s2+n*k/(n+k)*(y_bar-mu_0)^2))
+mu <- rnorm(1000, mean = (k*mu_0+n*y_bar)/(k+n), 
+            sd = sqrt(sigma2/(k+n)))
+
+plot(density(sigma2))
+plot(density(mu))
+```
+
+```{r}
+
+
+sample_posterior_mu_sigma2 <- function(alpha, beta, mu_0, k, n_samples = 1000) {
+  
+  # Sample from posterior of sigma^2
+  sigma2 <- rinvgamma(n_samples,
+                      shape = alpha + n / 2,
+                      scale = beta + 0.5 * ((n - 1) * s2 + (n * k / (n + k)) * (y_bar - mu_0)^2))
+  
+  # Sample from posterior of mu given sigma^2
+  mu <- rnorm(n_samples,
+              mean = (k * mu_0 + n * y_bar) / (k + n),
+              sd = sqrt(sigma2 / (k + n)))
+  
+  return(tibble(mu = mu, sigma2 = sigma2))
+}
+
+alpha = 3
+beta <- 6
+mu_0 <- 4
+k <- 10
+
+samples <- sample_posterior_mu_sigma2(alpha, beta, mu_0, k, n_samples = 1000)
+
+plot(density(samples$sigma2))
+plot(density(samples$mu))
+```
+
+```{r}
+library(expm)  # for matrix powers
+
+P <- matrix(c(1/3, 2/3, 1/4, 3/4), nrow = 2, byrow = TRUE)
+pi <- c(3/11, 8/11)
+
+tolerance <- 0.001
+
+for (n in 1:100) {
+  Pn <- P %^% n
+  
+  row1_close <- all(abs(Pn[1,] - pi) < tolerance)
+  row2_close <- all(abs(Pn[2,] - pi) < tolerance)
+  
+  if (row1_close && row2_close) {
+    cat("Stationary distribution reached at n =", n, "\n")
+    print(Pn)
+    break
+  }
+}
+
+```
+
+```{r}
+f <- function(x) {
+  gamma(5/2)^(-1) * (2^(-5/2)) * x^(3/2) * exp(-x/2)
+}
+
+dx <- 0.001
+x_vals <- seq(0, 20, by = dx)
+cdf <- cumsum(f(x_vals)) * dx
+
+# Find c where CDF ≈ 0.99
+c_riemann <- x_vals[which.min(abs(cdf - 0.99))]
+print(c_riemann)
+```
+ 
+```{r}
+set.seed(123)
+samples <- rchisq(1e6, df = 5)
+quantile_mc <- quantile(samples, 0.99)
+print(quantile_mc)
+```
+ 
+```{r}
+set.seed(123)
+N <- 1e6
+proposal <- rnorm(N, mean = 5, sd = sqrt(10))
+
+target_density <- function(x) dchisq(x, df = 5)
+proposal_density <- function(x) dnorm(x, mean = 5, sd = sqrt(10))
+
+weights <- ifelse(proposal > 0, target_density(proposal) / proposal_density(proposal), 0)
+
+cdf_estimate <- function(c_val) {
+  mean((proposal <= c_val) * weights)
+}
+
+quantile_is <- uniroot(function(c) cdf_estimate(c) - 0.99, lower = 10, upper = 20)$root
+print(quantile_is)
+
+```
+
+```{r}
+library(matrixcalc)
+P <- matrix(c(0, 0, 0, 0, 0, 0, 9/10, 1/10, 0, 0, 0, 1/5, 2/3, 2/15, 0, 0, 0, 1/5, 4/5, 0, 0, 0, 0, 0, 0) , nrow = 5, byrow = TRUE)
+multP = matrix.power(P, 100)
+print(multP)
+print(P %*% multP)
+```
+
+```{r}
+P2 <- matrix(c(9/10, 1/10, 0, 1/5, 2/3, 2/15, 0, 1/5, 4/5), nrow = 3, byrow = TRUE)
+eigen(P2)
+```
+
+```{r}
+P1 <- matrix(c(3/4, 1/4, 0, 1/2, 1/6, 1/3, 0, 1/2, 1/2), nrow = 3, byrow = TRUE)
+eigen(P1)
+```
+
+```{r}
+statP = matrix.power(P1, 100)
+currentP = P1
+i <- 1
+while (max(abs(currentP - statP)) > 0.01) {
+  i <- i + 1
+  currentP = currentP %*% P1
+}
+print(i)
+```
+
+
+
+```{r}
+set.seed(123)
+
+# p[i] holds the target probability for index i:
+# i=1 or 5 are out-of-range => p=0 (always rejected)
+p <- c(0, 6/11, 3/11, 2/11, 0)
+
+N <- 5000
+theta <- integer(N)
+
+# Start in "index = 2" => which corresponds to county 1
+theta[1] <- 2  
+
+for (i in 2:N) {
+  current <- theta[i - 1]
+  
+  # Propose either "current - 1" or "current + 1"
+  prop <- if (runif(1) < 0.2) current - 1 else current + 1
+  
+  # alpha ratio
+  
+  if (prop == current - 1) {
+    alpha <- min(1, (p[prop] * 0.8) / (p[current] * 0.2))
+  } else {
+    alpha <- min(1, (p[prop] * 0.2) / (p[current] * 0.8))
+  }
+  
+  # Accept/reject:
+  if (runif(1) < alpha) {
+    theta[i] <- prop
+  } else {
+    theta[i] <- current
+  }
+}
+
+# Real counties = indices 2,3,4.
+counts <- table(theta)
+counts
+
+# Convert back to actual county labels {1,2,3}:
+counts_real <- counts[names(counts) %in% c("2","3","4")]
+counts_real
+names(counts_real) <- c("1","2","3")
+
+# Estimated probabilities among real states:
+est <- counts_real / sum(counts_real)
+est
+```
+
+```{r}
+# Unnormalized posterior:
+target_density <- function(theta) {
+  # p(theta|y) ∝ [1 + 0.5*((theta-4)/5)^2]^(-3)
+  # We'll just return this for the ratio test:
+  val <- (1 + 0.5 * ((theta - 4)/5)^2)^(-3)
+  return(val)
+}
+
+set.seed(123)       # for reproducibility
+
+N <- 30000          # total iterations
+theta <- numeric(N) # to store draws
+theta[1] <- 0       # starting value (arbitrary)
+
+sigma <- 1          # initial guess at proposal std dev
+
+# Metropolis loop:
+for (i in 2:N) {
+  current <- theta[i - 1]
+  
+  # Propose from N(current, sigma^2):
+  proposal <- rnorm(1, mean = current, sd = sigma)
+  
+  # Compute Metropolis ratio (unnormalized):
+  alpha <- min(1, target_density(proposal) / target_density(current))
+  
+  # Accept/reject:
+  if (runif(1) < alpha) {
+    theta[i] <- proposal
+  } else {
+    theta[i] <- current
+  }
+}
+```
+
+```{r}
+plot(theta, type="l", main="Trace Plot of theta", xlab="Iteration", ylab="theta")
+```
+
+```{r}
+# 1) Unnormalized posterior:
+target_density <- function(t) (1 + 0.5*((t-4)/5)^2)^(-3)
+
+# 2) Random-walk Metropolis
+set.seed(123)
+N <- 30000
+theta <- numeric(N)
+theta[1] <- 0
+proposal_sd <- 9
+accept_count <- 0
+
+for (i in 2:N) {
+  curr <- theta[i-1]
+  prop <- rnorm(1, mean=curr, sd=proposal_sd)
+  alpha <- min(1, target_density(prop) / target_density(curr))
+  if (runif(1) < alpha) {
+    theta[i] <- prop
+    accept_count <- accept_count + 1
+  } else {
+    theta[i] <- curr
+  }
+}
+
+accept_rate <- accept_count/(N-1)
+cat("Acceptance rate =", accept_rate, "\n")
+
+# 3) Diagnostics
+plot(theta, type="l", main="Trace of theta", xlab="Iteration", ylab="theta")
+
+burn_in <- 5000
+chain <- theta[(burn_in+1):N]
+
+library(coda)
+mchain <- as.mcmc(chain)
+acf(mchain, main="ACF of post-burn-in chain")
+cat("ESS =", effectiveSize(mchain), "\n")
+
+# Posterior summary
+cat("Mean =", mean(chain), "  Var =", var(chain),
+    "  P(theta>0) =", mean(chain>0), "\n")
+
+hist(chain, breaks=50, probability=TRUE, main="Posterior of theta", xlab="theta")
+lines(density(chain), lwd=2)
+```
+
+```{r}
+target_density <- function(x) (1 + 0.5*((x-4)/5)^2)^(-3)
+
+set.seed(123)
+
+n <- 10000
+# Draw from q(theta) = N(4,16):
+samples <- rnorm(n, mean=4, sd=16)
+
+weights <- function(x) {
+  num <- target_density(x)
+  denom <- dnorm(x, mean=4, sd=16)
+  return (num / denom)
+}
+
+# Vector of weights for all draws:
+w <- weights(samples)
+
+# Estimate E[theta | y]:
+IS_mean <- sum(samples * w) / sum(w)
+
+# Estimate Var[theta | y]:
+# First get E[theta^2], then subtract (E[theta])^2.
+IS_theta2 <- sum(samples^2 * w) / sum(w)
+IS_var <- IS_theta2 - IS_mean^2
+
+# Estimate P(theta > 0):
+IS_prob_gt0 <- sum((samples > 0) * w) / sum(w)
+
+cat("Proposal N(4,16):\n")
+cat("  Mean       =", IS_mean,    "\n")
+cat("  Var        =", IS_var,     "\n")
+cat("  P(theta>0) =", IS_prob_gt0,"\n")
+
+```
+
+
+
+
+
+
+
+
+

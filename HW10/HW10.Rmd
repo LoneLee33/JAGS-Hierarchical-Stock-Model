@@ -1,0 +1,382 @@
+---
+title: "HW10"
+author: "Lun Li.14415"
+date: "2025-04-20"
+output:
+  pdf_document: default
+  pdf: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(coda)
+library(rjags)
+library(tidyr)
+library(dplyr)
+library(coda)
+```
+
+# Problem 1
+
+## a
+
+```{r}
+frd <- read.table('/Users/landlee/Desktop/STAT 3303/HW10/friends.txt', 
+                     header = TRUE)
+```
+
+```{r}
+# MCMC parameters
+niter <- 30000
+nburn <- 10000
+nadapt <- 10000
+
+# Number of schools and total observations
+Ns <- length(unique(frd$school))
+N <- nrow(frd)
+
+# Prepare JAGS data
+data_jags <- list(
+  y = frd$y,
+  x = frd$x,
+  school = frd$school,
+  Ns = Ns,
+  N = N
+)
+
+# Initial values
+set.seed(123)
+inits <- list(
+  mu_alpha = 0,
+  mu_beta = 0,
+  sigma_alpha = 1,
+  sigma_beta = 1,
+  alpha = rnorm(Ns, 0, 1),
+  beta = rnorm(Ns, 0, 1)
+)
+
+```
+
+```{r}
+model_string <- "model {
+  for (i in 1:N) {
+    y[i] ~ dbern(theta[i])
+    logit(theta[i]) <- alpha[school[i]] + beta[school[i]] * x[i]
+  }
+
+  for (j in 1:Ns) {
+    alpha[j] ~ dnorm(mu_alpha, tau_alpha)
+    beta[j] ~ dnorm(mu_beta, tau_beta)
+  }
+
+  mu_alpha ~ dnorm(0, 1/9)
+  mu_beta ~ dnorm(0, 1/9)
+  sigma_alpha ~ dunif(0, 3)
+  sigma_beta ~ dunif(0, 3)
+
+  tau_alpha <- pow(sigma_alpha, -2)
+  tau_beta <- pow(sigma_beta, -2)
+}"
+
+```
+
+```{r}
+fit1 = jags.model(textConnection(model_string), 
+                  data = data_jags,
+                  inits = inits, 
+                  n.chains = 1, 
+                  n.adapt = nadapt)
+
+update(fit1, nburn)  # Burn-in phase
+
+fit.samples = coda.samples(fit1, 
+                           c("mu_alpha", "mu_beta", "sigma_alpha", "sigma_beta", "alpha", "beta"), 
+                           n.iter = niter)
+
+summary(fit.samples)
+
+```
+
+```{r}
+# Extract MCMC samples into matrix
+mcmc_matrix <- as.matrix(fit.samples)
+
+# Choose key parameters to visualize
+params <- c("mu_alpha", "mu_beta", "sigma_alpha", "sigma_beta")
+
+# Set up plotting layout: 2 rows, 2 columns (each parameter gets trace + density)
+par(mfrow = c(2, 2))  # 2 plots per row
+
+# Loop through parameters and plot
+for (param in params) {
+  traceplot(fit.samples[, param], 
+            main = paste("Traceplot of", param), 
+            col = "blue", lwd = 1)
+  
+  plot(density(mcmc_matrix[, param]), 
+       main = paste("Posterior of", param), 
+       col = "red", lwd = 2)
+}
+```
+
+```{r}
+fit.samples.adapted <- window(fit.samples, start = nadapt + 1, end = niter)
+
+# ESS
+ess <- effectiveSize(fit.samples.adapted)
+cat("Effective Sample Size (ESS):\n")
+print(round(ess, 2))
+```
+
+```{r}
+traceplot(fit.samples)
+```
+
+
+## b
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+# Convert MCMC samples to data frame
+samples_df <- as.data.frame(as.matrix(fit.samples))
+
+# ---------- Boxplot for alpha[j] and mu_alpha ----------
+alpha_cols <- grep("^alpha\\[", names(samples_df), value = TRUE)
+
+alpha_long <- samples_df %>%
+  select(all_of(alpha_cols), mu_alpha) %>%
+  pivot_longer(cols = everything(), names_to = "Parameter", values_to = "Value")
+
+ggplot(alpha_long, aes(x = Parameter, y = Value)) +
+  geom_boxplot(fill = "skyblue") +
+  theme_minimal() +
+  coord_flip() +
+  labs(title = "Posterior Boxplots: alpha[j] and mu_alpha", y = "Value", x = "Parameter")
+
+# ---------- Boxplot for beta[j] and mu_beta ----------
+beta_cols <- grep("^beta\\[", names(samples_df), value = TRUE)
+
+beta_long <- samples_df %>%
+  select(all_of(beta_cols), mu_beta) %>%
+  pivot_longer(cols = everything(), names_to = "Parameter", values_to = "Value")
+
+ggplot(beta_long, aes(x = Parameter, y = Value)) +
+  geom_boxplot(fill = "salmon") +
+  theme_minimal() +
+  coord_flip() +
+  labs(title = "Posterior Boxplots: beta[j] and mu_beta", y = "Value", x = "Parameter")
+
+```
+
+# c
+
+```{r}
+set.seed(123)
+
+# Inverse logit function
+invlogit <- function(x) {
+  1 / (1 + exp(-x))
+  } 
+
+# Convert samples to matrix
+samples_df <- as.data.frame(as.matrix(fit.samples))
+
+# Get posterior draws of mu_alpha, mu_beta, sigma_alpha, sigma_beta
+N_samples <- nrow(samples_df)
+theta_same <- numeric(N_samples)
+theta_diff <- numeric(N_samples)
+
+for (i in 1:N_samples) {
+  # Simulate alpha* and beta* for a new school
+  alpha_star <- rnorm(1, samples_df$mu_alpha[i], samples_df$sigma_alpha[i])
+  beta_star <- rnorm(1, samples_df$mu_beta[i], samples_df$sigma_beta[i])
+  
+  # Predict friendship probability
+  theta_same[i] <- invlogit(alpha_star + beta_star * 1)
+  theta_diff[i] <- invlogit(alpha_star + beta_star * 0)
+}
+
+# Final results
+mean(theta_same)  # Predicted probability for x = 1
+mean(theta_diff)  # Predicted probability for x = 0
+
+```
+
+# Problme 2
+
+## a
+
+1. $\alpha_i$: Baseline mean change in $\Delta PCV$ for cats of breed $i$, 
+after adjusting for dose and type.
+
+2. $\beta_1$: Overall shift in $\Delta PCV$ across all cats, when breed, dose, 
+type, and domestic status are held constant.
+
+3. $\beta_2$: Effect of dose on $\Delta PCV$ (expected change per unit increase 
+in dose).
+
+4. $\beta_3$: Effect of disease type (Type = 1 for primary, 0 for secondary) on 
+$\Delta PCV$.
+
+5. $\mu_{ij}$: Expected $\Delta PCV$ for the $j$th cat of breed $i$.
+
+6. $\sigma^2$: Residual variance in $\Delta PCV$ across individual cats.
+
+7. $\gamma$: Difference in breed-level baseline $\Delta PCV$ between domestic 
+($=1$) and non-domestic ($=0$) cats.
+
+8. $\tau^2_{\alpha}$: Variance in breed-specific intercepts $\alpha_i$ across 
+all breeds.
+
+
+## b
+
+```{r}
+cats <- read.table('/Users/landlee/Desktop/STAT 3303/HW10/cats.txt', 
+                     header = TRUE)
+
+cats <- cats %>%
+  mutate(
+    breed_index = as.numeric(factor(Breed, levels = c("A", "B", "C", "D", "E"))),
+    domestic = ifelse(Breed %in% c("A", "B", "C"), 1, 0)
+  )
+```
+
+```{r}
+# MCMC parameters
+niter <- 10000
+nburn <- 1000
+nadapt <- 1000
+
+# Number of breeds and total observations
+Nb <- length(unique(cats$Breed))
+N <- nrow(cats)
+
+# Prepare JAGS data
+data_jags <- list(
+  y = cats$DeltaPCV,
+  type = cats$Type,
+  dose = cats$Dose,
+  breed = cats$breed_index,
+  domestic = c(1,1,1,0,0),
+  Nb = Nb,
+  N = N
+)
+
+# Initial values
+inits <- list(
+  beta1 = 0,
+  beta2 = 0,
+  beta3 = 0,
+  gamma = 0,
+  tau = 1,
+  tau_alpha = 1,
+  alpha = rep(0, Nb)
+)
+
+```
+
+```{r}
+model <- "model {
+  for (i in 1:N) {
+    y[i] ~ dnorm(mu[i], tau)
+    mu[i] <- alpha[breed[i]] + beta1 + beta2 * dose[i] + beta3 * type[i] 
+  }
+
+  for (j in 1:Nb) {
+    alpha[j] ~ dnorm(gamma * domestic[j], tau_alpha)
+  }
+
+  beta1 ~ dnorm(0, 1/100)
+  beta2 ~ dnorm(0, 1/100)
+  beta3 ~ dnorm(0, 1/100)
+  gamma ~ dnorm(0, 1/100)
+  tau ~ dgamma(3, 10)
+  tau_alpha ~ dgamma(3, 10)
+  
+  sigma <- 1 / sqrt(tau)
+}"
+
+```
+
+```{r}
+fit <- jags.model(textConnection(model), 
+                  data = data_jags, 
+                  inits = inits, 
+                  n.chains = 1, 
+                  n.adapt = nadapt)
+
+params <- c("beta1", "beta2", "beta3", "gamma", "tau", "tau_alpha", "alpha", "sigma")
+cat.samples <- coda.samples(fit, variable.names = params, n.iter = niter)
+summary(cat.samples)
+```
+
+```{r}
+# Convert MCMC samples to matrix
+mcmc_matrix <- as.matrix(cat.samples)
+
+# Parameters to plot
+params <- c("beta1", "beta2", "beta3", "gamma", "tau", "tau_alpha")
+
+# Set layout: 2 rows, 3 columns
+par(mfrow = c(2, 3))
+
+# Loop over each parameter
+for (param in params) {
+  # Traceplot for one parameter at a time
+  traceplot(cat.samples[, param], 
+            main = paste("Traceplot of", param), 
+            col = "blue", lwd = 1)
+  
+  # Density plot
+  plot(density(mcmc_matrix[, param]), 
+       main = paste("Posterior of", param), 
+       col = "red", lwd = 2)
+}
+
+ess <- effectiveSize(cat.samples)
+print(round(ess, 2))
+```
+
+```{r}
+traceplot(cat.samples)
+```
+
+## c
+
+             Mean      SD  Naive SE Time-series SE
+beta2     -0.3928 0.08698 0.0008698       0.003443
+             2.5%      25%     50%     75%   97.5%
+beta2     -0.5591 -0.45095 -0.3946 -0.3365 -0.2162
+
+Yes. beta2 = -0.3960 and the confidence interval doesn't include 0
+
+## d
+
+             Mean      SD  Naive SE Time-series SE
+gamma     -2.3542 1.56515 0.0090364      0.0630482
+             2.5%      25%     50%     75%   97.5%
+gamma     -5.6342 -3.32079 -2.3110 -1.3267  0.7726
+
+No. Because the confidence interval contains 0. 
+
+## e
+
+The measure of uncertainty I used in both part (c) and part (d) is the 95% 
+posterior credible interval, based on the 2.5% and 97.5% quantiles of the 
+posterior distributions which can be found in the summary.
+
+
+
+
+
+
+
+
+

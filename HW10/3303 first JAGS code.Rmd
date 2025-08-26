@@ -1,0 +1,54 @@
+---
+title: "3303 first JAGS code"
+output:
+  html_document:
+    df_print: paged
+date: "2023-01-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(coda)
+library(rjags)
+```
+
+
+
+```{r}
+nobs = 30
+
+y = rnorm(nobs,1,1)
+
+niter = 15000
+nburn = 5000
+nadapt = 5000
+
+mydata=list(n=nobs, y=y)
+
+myinit=list(tau=1,beta0=0)
+
+mymodel = "model{
+#likelihood
+for(i in 1:n){
+y[i] ~ dnorm(mu[i], tau)
+mu[i]=beta0
+}
+
+#prior
+tau ~ dgamma(3,3)
+beta0 ~ dnorm(0,1)
+
+
+}"
+```
+
+```{r}
+fit1 = jags.model(textConnection(mymodel), data=mydata
+                  ,inits=myinit, n.chains=1, n.adapt=nadapt)
+fit.samples=coda.samples(fit1, c("tau", "beta0"), n.iter=niter)
+summary(fit.samples)
+```
+
