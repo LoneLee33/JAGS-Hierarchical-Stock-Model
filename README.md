@@ -2,13 +2,14 @@
 
 ## Overview
 
-This repository packages my **Bayesian Inference** course project modeling the probability that a stock posts a positive return using a hierarchical Bayesian logistic model in JAGS. 
+This repository packages my course project in **Bayesian Inference** that estimates the probability that a stock will experience a positive return using the assistance of a **hierarchical Bayesian logistic model** in **JAGS**.
 
-The workflow combines EDA with a nested sector→stock structure—market baseline μ, sector effects αₛ, and stock effects βₛⱼ—fit via **rjags** with multi-chain MCMC and standard diagnostics (trace/density, R-hat, ESS, ACF). The goal is decision-oriented: from posterior draws we identify the most likely best sector overall and, within each sector, the most likely best stock, while clearly documenting assumptions and convergence checks. 
+The Workflow aligns EDA with the following nested sector→stock structure—market baseline μ, sector effects αₛ, and stock effects βₛⱼ—are modeled with **rjags** with multi-chain **MCMC** and standard diagnostics (**R-hat**, **ESS**, **ACF**, trace/density). The goal is decision-centric: from posterior simulations we pick the most plausible top performing sector out of all sectors and within sector the most plausible top performing stock with clear documentation along with the convergence checks.
 
-Results are presented as posterior probability summaries and rankings—not single point estimates—to emphasize uncertainty-aware comparisons across sectors and stocks. 
+Results are presented as posterior probability summaries and rankings—not point estimates—to emphasize comparisons across sectors and stocks that are guided by uncertainty.
 
-The repo also includes supporting R Markdown notebooks on **MCMC basics**, **Metropolis sampling**, and **JAGS diagnostics** that build up to the main model.
+The repository contains the R Markdown notebooks corresponding to MCMC fundamentals, **Metropolis** sampling, and **JAGS diagnostics** up through the main model.
+
 
 > Originally developed from coursework; reorganized and documented here as a standalone reproducible repository.
 
