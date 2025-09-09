@@ -1,8 +1,16 @@
 # JAGS-Hierarchical-Stock-Model
 
-End-to-end implementation of a **hierarchical Bayesian logistic model in JAGS** to estimate the probability that a stock has a **positive return** over a period. The repository also includes supporting R Markdown files that demonstrate **MCMC basics**, **Metropolis sampling**, and **JAGS diagnostics** used by the main model.
+## Overview
 
-> Originally developed from STAT 3303 coursework; reorganized and documented here as a standalone reproducible project.
+This repository packages my **Bayesian Inference** course project modeling the probability that a stock posts a positive return using a hierarchical Bayesian logistic model in JAGS. 
+
+The workflow combines EDA with a nested sector→stock structure—market baseline μ, sector effects αₛ, and stock effects βₛⱼ—fit via **rjags** with multi-chain MCMC and standard diagnostics (trace/density, R-hat, ESS, ACF). The goal is decision-oriented: from posterior draws we identify the most likely best sector overall and, within each sector, the most likely best stock, while clearly documenting assumptions and convergence checks. 
+
+Results are presented as posterior probability summaries and rankings—not single point estimates—to emphasize uncertainty-aware comparisons across sectors and stocks. 
+
+The repo also includes supporting R Markdown notebooks on **MCMC basics**, **Metropolis sampling**, and **JAGS diagnostics** that build up to the main model.
+
+> Originally developed from coursework; reorganized and documented here as a standalone reproducible repository.
 
 ---
 
